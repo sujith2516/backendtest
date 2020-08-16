@@ -1,0 +1,15 @@
+{
+    "development": {
+        "mySqlConnections": {
+            "testdb": {
+                "host": "localhost",
+                "port": 3306,
+                "database": "test",
+                "user": "root",
+                "password": "testing",
+                "multipleStatements": true
+            }
+        },
+        "jwt_secret": "2ea49d57-7ee3-400b-9358-d8bbc40dda99"
+    }
+}
