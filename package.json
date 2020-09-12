@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "node ./bin/www",
+    "start": "node app.js",
     "test": "mocha unit_tests/test.js --timeout 10000"
   },
   "dependencies": {

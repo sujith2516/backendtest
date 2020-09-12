@@ -8,10 +8,7 @@ const app = express();
 const cors = require('cors');
 const path = require('path');
 app.use(cors());
-
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
+const port = 3000;
 
 app.use(require('morgan')('combined', {stream: logger.stream}));
 app.use(express.json());
@@ -33,12 +30,19 @@ app.use(function (err, req, res, next) {
     res.locals.message = err.message;
     res.locals.error = req.app.get('env') === 'development' ? err : {};
 
-    // render the error page
     res.status(err.status || 500);
-    res.render('error');
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
 });
+
+process.on('uncaughtException', (err, origin) => {
+    console.log(`Caught exception: ${err}\n` +
+        `Exception origin: ${origin}`)
+});
+
+app.listen(port, () => {
+    console.log(`App is listening at http://localhost:${port}`)
+})
 
 module.exports = app; // export app for testing

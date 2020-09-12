@@ -1,5 +1,4 @@
 const chai = require('chai');
-// const expect = chai.expect;
 const chaiHttp = require('chai-http');
 const should = chai.should();
 let app = require('../app');
@@ -8,7 +7,7 @@ chai.use(chaiHttp);
 
 describe('/POST user/register', function(){
     // send unique username along with required data  
-    let user = {"username": "Minnu", "firstname": "Minnu", "lastname": "V", "email": "Minnu@email.com", "password": "abc123"};
+    let user = {"username": "Modi", "firstname": "Modi", "lastname": "N", "email": "Modi@email.com", "password": "abc123"};
     it('it should send a response to client stating mail has been sent', (done)=>{
         chai.request(app)
         .post('/user/register')
@@ -64,7 +63,7 @@ describe('/POST user/login', function(){
           });
     });
 
-    // send the user json object with all data
+    // send the user json object with valid data
     it('it should send a response token along with user info', (done)=>{
         let user = {"username": "Swetha", "password": "abc123"};
           chai.request(app)

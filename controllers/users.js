@@ -1,159 +1,77 @@
-const connectionProvider = require("../utils/connectionProvider");
-const settingsProvider = require("../utils/settingsProvider");
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 var logger = require('../utils/logger').logger;
-const saltRounds = 10;
+const loginService = require('../services/loginService');
+const bcryptService = require('../services/bcryptService');
+const tokenService = require('../services/tokenService');
 
 module.exports = {
     // Check wether user exists in our db, if not exists do next call
     // if user already exists in our db, send response 409.
-    checkUserDuplicated:(req, res, next) => {
-        let result = {};
-        let status = 200;
+    checkUserDuplicated: async (req, res, next) => {
         const username = req.body.username;
-        let pool = connectionProvider.mySqlConnectionProvider.getTestDBConnection();
-        let queryText = `SELECT count('x') AS count FROM user WHERE username = ? `;
-        pool.getConnection(function (err, connection) {
-            if (err) {
-                // log the error
-                logger.error(err);
-                status = 500;
-                result.status = status;
-                result.error = err;
-                res.status(status).send(result);
+        try {
+            const userInfo = await loginService.checkUserDuplicated(username);
+            if (userInfo.length && userInfo[0].count) {
+                res.status(409).send({error: 'User name already exists.'});
+            } else {
+                next();
             }
-            connection.query(queryText, [username], (err, rows) => {
-                connectionProvider.mySqlConnectionProvider.closeConnection(connection);
-                if (err) {
-                    // log the error
-                    logger.error(err);
-                    status = 500;
-                    result.status = status;
-                    result.error = err;
-                    res.status(status).send(result);
-                }
-                if (rows.length && rows[0].count) {
-                    status = 409;
-                    result.status = status;
-                    result.error = 'User name already exists.';
-                    res.status(status).send(result);
-                } else {
-                    next();
-                }
-            });
-        });
+        } catch (err) {
+            if (err) logger.error(err);
+            res.status(500).send({error: `Internal server error`});
+        }
     },
 
     // add new user to our db
-    register: (req, res) => {
-        let result = {};
-        let status = 201;
-        const {username, firstname, lastname, email, password} = req.body;
-        bcrypt.hash(password, saltRounds, function (err, hash) {
-            if (err) {
-                logger.error(err);
-                status = 500;
-                result.status = status;
-                result.error = err;
-                res.status(status).send(result);
-            }
-            let pool = connectionProvider.mySqlConnectionProvider.getTestDBConnection();
-            let queryText = `INSERT INTO user (id, username, password, firstname, lastname, email, createddate) 
-                                VALUES (uuid(), ?, ?, ?, ?, ?, NOW()) `;
-            pool.getConnection(function (err, connection) {
-                if (err) {
-                    // log the error
-                    logger.error(err);
-                    status = 500;
-                    result.status = status;
-                    result.error = err;
-                    res.status(status).send(result);
-                }
-                if (connection) {
-                    connection.query(queryText, [username, hash, firstname, lastname, email], (err, rows) => {
-                        connectionProvider.mySqlConnectionProvider.closeConnection(connection);
-                        if (err) {
-                            // log the error
-                            logger.error(err);
-                            status = 500;
-                            result.status = status;
-                            result.error = err;
-                        } else {
-                            result.status = status;
-                            result.message = "A verification mail has been sent to your registered mail.";
-                        }
-                        res.status(status).send(result);
-                    });
-                }
-            });
-        });
+    register: async (req, res) => {
+        const userObj = {
+            username: req.body.username,
+            firstname: req.body.firstname,
+            lastname: req.body.lastname,
+            email: req.body.email
+        }
+        try {
+            const hash = await bcryptService.generateHash(req.body.password);
+            userObj.hash = hash;
+            await loginService.createNewUser(userObj);
+            res.status(201).send({message: `A verification mail has been sent to your registered mail.`});
+        } catch (err) {
+            if (err) logger.error(err);
+            res.status(500).send({error: `Internal server error`});
+        }
     },
 
     // Match the supplied username, password with our db entries
     // send user object on successfull match, if not send appropriate error
-    login: (req, res) => {
+    login: async (req, res) => {
         let result = {};
-        let status = 200;
         const username = req.body.username;
         const password = req.body.password;
-        let pool = connectionProvider.mySqlConnectionProvider.getTestDBConnection();
-        let queryText = `SELECT id, username, password, email, firstname, lastname FROM user WHERE username = ?`;
-        pool.getConnection(function (err, connection) {
-            if (err) {
-                // log the error
-                logger.error(err);
-                status = 500;
-                result.status = status;
-                result.error = err;
-                res.status(status).send(result);
-            }
-            if (connection) {
-                connection.query(queryText, [username], (err, rows) => {
-                    connectionProvider.mySqlConnectionProvider.closeConnection(connection);
-                    if (err) {
-                        // log the error
-                        logger.error(err);
-                        status = 500;
-                        result.status = status;
-                        result.error = err;
-                        res.status(status).send(result);
-                    }
-                    if (rows.length) {
-                        let user = rows[0];
-                        bcrypt.compare(password, user.password).then(match=>{
-                            if (match) {
-                                // Create a token
-                                const payload = { user: user.username };
-                                const secret = settingsProvider.jwt_secret;
-                                const options = { expiresIn: '1h', issuer: 'http://localhost:3000' };
-                                const token = jwt.sign(payload, secret, options);
-
-                                delete user['password'];
-                                // result.status = status;
-                                // result.data = { token: token, user: user};
-                                result = { token: token, user: user};
-                            } else {
-                                status = 401;
-                                result.status = status;
-                                result.error = `Authentication error`;
-                            }
-                            res.status(status).send(result);
-                        }).catch(err=> {
-                            logger.error(err);
-                            status = 500;
-                            result.status = status;
-                            result.error = err;
-                            res.status(status).send(result);
+        try {
+            var userInfo = await loginService.getUserInfo(username);
+            if (userInfo.length) {
+                userInfo = userInfo[0];
+                // match the password in our db
+                var mached = await bcryptService.matchPassword(password, userInfo.password);
+                if (mached) {
+                    // password matched in our db, generate token
+                    tokenService.generateToken(username)
+                        .then((token) => {
+                            delete userInfo['password'];
+                            result = { token: token, user: userInfo };
+                            res.status(200).send(result);
+                        }).catch((err) => {
+                            if (err) logger.error(err);
+                            res.status(500).send({error: `Token not generated`});
                         });
-                    } else {
-                        status = 404;
-                        result.status = status;
-                        result.error = 'User does not exists.';
-                        res.status(status).send(result);
-                    }
-                });
+                } else {
+                    res.status(401).send({error: `Authentication error`});
+                }
+            } else {
+                res.status(404).send({error: `User does not exists.`});
             }
-        });
+        } catch (err) {
+            if (err) logger.error(err);
+            res.status(500).send({error: `Internal server error`});
+        }
     }
 }
